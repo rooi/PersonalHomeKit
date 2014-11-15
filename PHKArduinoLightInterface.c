@@ -17,7 +17,7 @@ int serialPort = -1;
 
 void setupPort() {
     serialPort = open(SerialPortAddr, O_WRONLY|O_NOCTTY|O_NDELAY);
-    printf("Serial Port: %d\n", serialPort);
+    printf("Arduino Serial Port: %d\n", serialPort);
     if (serialPort >= 0) {
         struct termios options;
         
@@ -49,6 +49,7 @@ void setupPort() {
 }
 
 void startIdentify() {
+    printf("Arduino startIdentify()\n");
     write(serialPort, "-1\n", 3);
 }
 

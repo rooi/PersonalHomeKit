@@ -16,6 +16,7 @@
 extern "C" {
 #include <stdlib.h>
 }
+#include <dns_sd.h>
 
 #include "PHKControllerRecord.h"
 
@@ -34,6 +35,8 @@ struct DeviceStruct {
     string name;
     string identity;
     string uuid;
+    int _socket_v4, _socket_v6;
+    DNSServiceRef netServiceV4, netServiceV6;
     
     const char* nameAsChar()     {return name.c_str();};
     const char* identityAsChar() {return identity.c_str();};
@@ -200,7 +203,7 @@ public:
         if (_value)
             identify();
     }
-    virtual void identify() {}
+    virtual void identify() {printf("identify()\n");}
     virtual string describe();
 };
 

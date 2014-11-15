@@ -63,8 +63,8 @@ const unsigned char accessorySecretKey[32] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 //int connection[numberOfClient];
 vector<PHKConnection> PHKNetworkIP::connections;
 
-int _socket_v4, _socket_v6;
-DNSServiceRef netServiceV4, netServiceV6;
+//int _socket_v4, _socket_v6;
+//DNSServiceRef netServiceV4, netServiceV6;
 
 //Network Setup
 int setupSocketV4(unsigned int maximumConnection) {
@@ -102,23 +102,24 @@ void registerFail(DNSServiceRef sdRef, DNSRecordRef RecordRef, DNSServiceFlags f
     exit(0);
 }
 
-TXTRecordRef PHKNetworkIP::buildTXTRecord(DeviceStruct device) {
+TXTRecordRef PHKNetworkIP::buildTXTRecord(DeviceStruct* device) {
+    printf("buildTXTRecord for: %s\n", device->nameAsChar());
     TXTRecordRef txtRecord;
     TXTRecordCreate(&txtRecord, 0, NULL);
     TXTRecordSetValue(&txtRecord, "pv", 3, "1.0");  //Version
-    TXTRecordSetValue(&txtRecord, "id", 17, device.identityAsChar());    //Device id
+    TXTRecordSetValue(&txtRecord, "id", 17, device->identityAsChar());    //Device id
     TXTRecordSetValue(&txtRecord, "c#", 1, "1");    //Number of User?
     TXTRecordSetValue(&txtRecord, "s#", 1, "2");    //Number of service
     TXTRecordSetValue(&txtRecord, "sf", 1, "1");    //No idea what it is
     TXTRecordSetValue(&txtRecord, "ff", 1, "0");    //1 for MFI product
-    TXTRecordSetValue(&txtRecord, "md", device.name.length(), device.nameAsChar());    //Model Name
+    TXTRecordSetValue(&txtRecord, "md", device->name.length(), device->nameAsChar());    //Model Name
     return txtRecord;
 }
 
-void PHKNetworkIP::setupSocket(DeviceStruct device) {
+void PHKNetworkIP::setupSocket(DeviceStruct* device) {
     TXTRecordRef txtRecord = buildTXTRecord(device);
-    _socket_v4 = setupSocketV4(5);
-    DNSServiceRegister(&netServiceV4, 0, 0, device.nameAsChar(), PHKNetworkServiceType, "", NULL, htons(getSocketPortNumberV4(_socket_v4)), TXTRecordGetLength(&txtRecord), TXTRecordGetBytesPtr(&txtRecord), NULL, NULL);
+    device->_socket_v4 = setupSocketV4(5);
+    DNSServiceRegister(&device->netServiceV4, 0, 0, device->nameAsChar(), PHKNetworkServiceType, "", NULL, htons(getSocketPortNumberV4(device->_socket_v4)), TXTRecordGetLength(&txtRecord), TXTRecordGetBytesPtr(&txtRecord), NULL, NULL);
     TXTRecordDeallocate(&txtRecord);
 }
 
@@ -129,7 +130,7 @@ PHKNetworkIP::PHKNetworkIP(Devices* devices_) : devices(devices_) {
         connections.push_back(PHKConnection(devices));
     }
     for(unsigned int i=0; i<devices->size(); i++) {
-        DeviceStruct device = devices->at(i);
+        DeviceStruct* device = &devices->at(i);
         setupSocket(device);
     }
 }
@@ -182,21 +183,27 @@ void* PHKConnection::connectionLoop() const {
 }
 
 void PHKNetworkIP::handleConnection() {
-    int subSocket = accept(_socket_v4, 0, NULL);
-    
-    int index = -1;
-    for (int i = 0; i < connections.size(); i++) {
-        PHKConnection* connection = &connections.at(i);
-        if (connection->socketNumber == -1) {
-            index = i;
-            printf("%d\n",subSocket);
-            connection->socketNumber = subSocket;
-            pthread_create(&connection->thread, NULL, PHKConnection::connectionLoopFunc, connection);
-            break;
+    for(unsigned int deviceNr=0; deviceNr<devices->size(); deviceNr++)
+    {
+        DeviceStruct device = devices->at(deviceNr);
+        
+        printf("device._socket_v4 = %d\n",device._socket_v4);
+        
+        int subSocket = accept(device._socket_v4, 0, NULL);
+        
+        int index = -1;
+        for (int i = 0; i < connections.size(); i++) {
+            PHKConnection* connection = &connections.at(i);
+            if (connection->socketNumber == -1) {
+                index = i;
+                connection->socketNumber = subSocket;
+                pthread_create(&connection->thread, NULL, PHKConnection::connectionLoopFunc, connection);
+                break;
+            }
         }
+        
+        if (index < 0) close(subSocket);
     }
-    
-    if (index < 0) close(subSocket);
 
 }
 
@@ -763,7 +770,9 @@ void PHKConnection::handlePairVerify(int subSocket, char *buffer) const {
 
 //Object Logic
 PHKNetworkIP::~PHKNetworkIP() {
-    DNSServiceRefDeallocate(netServiceV4);
+    for(unsigned int i=0; i<devices->size(); i++) {
+        DNSServiceRefDeallocate(devices->at(i).netServiceV4);
+    }
 }
 
 PHKNetworkMessage::PHKNetworkMessage(const char *rawData) {

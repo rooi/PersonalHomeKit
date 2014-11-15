@@ -1,37 +1,8 @@
 #include "Accessory.h"
 
 #include "PHKAccessory.h"
+#include "PHKLightWaveRFAccessory.h"
 
-//Global Level of light strength
-int lightStength;
-
-class lightPowerState: public boolCharacteristics {
-public:
-    lightPowerState(int index): boolCharacteristics(index, charType_on, premission_read|premission_write){}
-    string value() {
-        if (lightStength > 0)
-            return "1";
-        return "0";
-    }
-    void setValue(string str) {
-        this->boolCharacteristics::setValue(str);
-        if (_value) {
-            setLightStrength(255);
-        } else {
-            setLightStrength(0);
-        }
-    }
-};
-
-class lightBrightness: public intCharacteristics {
-public:
-    lightBrightness(int index):intCharacteristics(index, charType_brightness, premission_read|premission_write, 0, 100, 1, unit_percentage) {}
-    void setValue(string str) {
-        this->intCharacteristics::setValue(str);
-        lightStength = _value;
-        setLightStrength(2.55*_value);
-    }
-};
 
 class lightService: public Service {
     stringCharacteristics serviceName;
@@ -62,11 +33,11 @@ public:
 
 //For bridge, create more than one subclass, and insert in main accessory
 //Also change the MainAccessorySet
-class LightAccessory: public Accessory {
+class MainAccessory: public Accessory {
     infoService info;
     lightService light;
 public:
-    LightAccessory(int aid, DeviceStruct device): Accessory(aid),
+    MainAccessory(int aid, DeviceStruct device): Accessory(aid),
     info(1, device), light(info.serviceID+info.numberOfCharacteristics()+1, device.name) {}
     inline virtual short numberOfService() { return 2; }
     inline virtual Service *serviceAtIndex(int index) {
@@ -82,12 +53,12 @@ public:
 
 //For bridge, change the subject to dynamic assign
 class MainAccessorySet: public AccessorySet {
-    std::vector<LightAccessory*> accessories;
+    std::vector<LightWaveRFAccessory*> accessories;
 public:
     MainAccessorySet(Devices* devices) {
         for(unsigned int i=0;i<devices->size();i++) {
             int aid = i+1;
-            accessories.push_back(new LightAccessory(aid, devices->at(i)));
+            accessories.push_back(new LightWaveRFAccessory(aid, devices->at(i), "WoonKamer"));
         }
     }
     virtual ~MainAccessorySet() {

@@ -41,8 +41,8 @@ public:
 void broadcastMessage(char *buffer, size_t len);
 
 class PHKNetworkIP {
-    void setupSocket(DeviceStruct device);
-    TXTRecordRef buildTXTRecord(DeviceStruct device);
+    void setupSocket(DeviceStruct* device);
+    TXTRecordRef buildTXTRecord(DeviceStruct* device);
     
     Devices* devices;
 
