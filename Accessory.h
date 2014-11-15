@@ -6,9 +6,11 @@
 //
 //
 
-#ifndef __Workbench__PHKAccessory__
-#define __Workbench__PHKAccessory__
+#ifndef __Workbench__Accessory__
+#define __Workbench__Accessory__
 
-void initAccessorySet();
+#include "PHKAccessory.h"
 
-#endif /* defined(__Workbench__PHKAccessory__) */
+void initAccessorySet(Devices* devices);
+
+#endif /* defined(__Workbench__Accessory__) */

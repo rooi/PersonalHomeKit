@@ -7,6 +7,7 @@
 //
 
 #include "PHKAccessory.h"
+#include "PHKNetworkIP.h"
 
 
 const char hapJsonType[] = "application/hap+json";

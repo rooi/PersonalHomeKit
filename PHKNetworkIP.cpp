@@ -58,9 +58,10 @@ const unsigned char accessorySecretKey[32] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 
 #if MCU
 #else
-pthread_t threads[numberOfClient];
+//pthread_t threads[numberOfClient];
 #endif
-int connection[numberOfClient];
+//int connection[numberOfClient];
+vector<PHKConnection> PHKNetworkIP::connections;
 
 int _socket_v4, _socket_v6;
 DNSServiceRef netServiceV4, netServiceV6;
@@ -101,54 +102,56 @@ void registerFail(DNSServiceRef sdRef, DNSRecordRef RecordRef, DNSServiceFlags f
     exit(0);
 }
 
-TXTRecordRef PHKNetworkIP::buildTXTRecord() {
+TXTRecordRef PHKNetworkIP::buildTXTRecord(DeviceStruct device) {
     TXTRecordRef txtRecord;
     TXTRecordCreate(&txtRecord, 0, NULL);
     TXTRecordSetValue(&txtRecord, "pv", 3, "1.0");  //Version
-    TXTRecordSetValue(&txtRecord, "id", 17, deviceIdentity);    //Device id
+    TXTRecordSetValue(&txtRecord, "id", 17, device.identityAsChar());    //Device id
     TXTRecordSetValue(&txtRecord, "c#", 1, "1");    //Number of User?
     TXTRecordSetValue(&txtRecord, "s#", 1, "2");    //Number of service
     TXTRecordSetValue(&txtRecord, "sf", 1, "1");    //No idea what it is
     TXTRecordSetValue(&txtRecord, "ff", 1, "0");    //1 for MFI product
-    TXTRecordSetValue(&txtRecord, "md", strlen(deviceName), deviceName);    //Model Name
+    TXTRecordSetValue(&txtRecord, "md", device.name.length(), device.nameAsChar());    //Model Name
     return txtRecord;
 }
 
-void PHKNetworkIP::setupSocket() {
-    TXTRecordRef txtRecord = buildTXTRecord();
+void PHKNetworkIP::setupSocket(DeviceStruct device) {
+    TXTRecordRef txtRecord = buildTXTRecord(device);
     _socket_v4 = setupSocketV4(5);
-    DNSServiceRegister(&netServiceV4, 0, 0, deviceName, PHKNetworkServiceType, "", NULL, htons(getSocketPortNumberV4(_socket_v4)), TXTRecordGetLength(&txtRecord), TXTRecordGetBytesPtr(&txtRecord), NULL, NULL);
+    DNSServiceRegister(&netServiceV4, 0, 0, device.nameAsChar(), PHKNetworkServiceType, "", NULL, htons(getSocketPortNumberV4(_socket_v4)), TXTRecordGetLength(&txtRecord), TXTRecordGetBytesPtr(&txtRecord), NULL, NULL);
     TXTRecordDeallocate(&txtRecord);
 }
 
-PHKNetworkIP::PHKNetworkIP() {
+PHKNetworkIP::PHKNetworkIP(Devices* devices_) : devices(devices_) {
     SRP_initialize_library();
     srand((unsigned int)time(NULL));
     for (int i = 0; i < numberOfClient; i++) {
-        connection[i] = -1;
+        connections.push_back(PHKConnection(devices));
     }
-    setupSocket();
+    for(unsigned int i=0; i<devices->size(); i++) {
+        DeviceStruct device = devices->at(i);
+        setupSocket(device);
+    }
 }
 
 //Connection Logic
 void broadcastMessage(char *buffer, size_t len) {
-    for (int i = 0; i < numberOfClient; i++) {
-        int socketNumber = connection[i];
+    for (int i = 0; i < PHKNetworkIP::connections.size(); i++) {
+        int socketNumber = PHKNetworkIP::connections.at(i).socketNumber;
         if (socketNumber >= 0) {
             write(socketNumber, buffer, len);
         }
     }
 }
-void handlePairSeup(int subSocket, char *buffer);
-void handlePairVerify(int subSocket, char *buffer);
-void *connectionLoop(void *argument) {
-    int subSocket = *(int*)argument;ssize_t len;
+
+void* PHKConnection::connectionLoop() const {
+    int subSocket = socketNumber;ssize_t len;
     if (subSocket >= 0) {
         printf("Start Connect: %d\n", subSocket);
         
         do {
             char *buffer = new char[4096];
-            len = read(*(int*)argument, buffer, 4096);
+            len = read(subSocket, buffer, 4096);
             PHKNetworkMessage msg(buffer);
             if (len > 0) {
                 if (!strcmp(msg.directory, "pair-setup")){
@@ -157,11 +160,11 @@ void *connectionLoop(void *argument) {
                      * The processo f pair-setup
                      */
                     
-                    handlePairSeup(*(int*)argument, buffer);
+                    handlePairSetup(subSocket, buffer);
                     
                 }
                 else if (!strcmp(msg.directory, "pair-verify")){
-                    handlePairVerify(*(int*)argument, buffer);
+                    handlePairVerify(subSocket, buffer);
                 }
             }
             
@@ -169,24 +172,26 @@ void *connectionLoop(void *argument) {
             
         } while (len > 0);
         
-        close(*(int*)argument);
+        close(subSocket);
         printf("Stop Connect: %d\n", subSocket);
         
-        *(int*)argument = -1;
+        subSocket = -1;
         
     }
     return NULL;
 }
 
-void PHKNetworkIP::handleConnection() const {
+void PHKNetworkIP::handleConnection() {
     int subSocket = accept(_socket_v4, 0, NULL);
     
     int index = -1;
-    for (int i = 0; i < numberOfClient; i++) {
-        if (connection[i] == -1) {
+    for (int i = 0; i < connections.size(); i++) {
+        PHKConnection* connection = &connections.at(i);
+        if (connection->socketNumber == -1) {
             index = i;
-            connection[index] = subSocket;
-            pthread_create(&threads[index], NULL, connectionLoop, &connection[index]);
+            printf("%d\n",subSocket);
+            connection->socketNumber = subSocket;
+            pthread_create(&connection->thread, NULL, PHKConnection::connectionLoopFunc, connection);
             break;
         }
     }
@@ -195,7 +200,7 @@ void PHKNetworkIP::handleConnection() const {
 
 }
 
-void handlePairSeup(int subSocket, char *buffer) {
+void PHKConnection::handlePairSetup(int subSocket, char *buffer) const {
     PHKNetworkMessageDataRecord stateRecord;
     stateRecord.activate = true;    stateRecord.data = new char[1]; stateRecord.length = 1;    stateRecord.index = 6;
     int state = 1;
@@ -321,7 +326,11 @@ void handlePairSeup(int subSocket, char *buffer) {
                 
                 if (bcmp(verify, mac, 16)) {
                     PHKNetworkMessageDataRecord responseRecord;
-                    responseRecord.activate = true; responseRecord.data = new char[1]; responseRecord.data[0] = 1; responseRecord.index = 7;   responseRecord.length = 1;
+                    responseRecord.activate = true;
+                    responseRecord.data = new char[1];
+                    responseRecord.data[0] = 1;
+                    responseRecord.index = 7;
+                    responseRecord.length = 1;
                     mResponse.data.addRecord(responseRecord);
 #if HomeKitLog == 1
                     printf("Corrupt TLv8 at M5\n");
@@ -363,13 +372,21 @@ void handlePairSeup(int subSocket, char *buffer) {
                     else {
                         PHKNetworkMessageData *returnTLV8 = new PHKNetworkMessageData();
                         
+                        for(unsigned int deviceNr=0; deviceNr<devices->size();deviceNr++)
                         {
+                            DeviceStruct device = devices->at(deviceNr);
                             PHKNetworkMessageDataRecord usernameRecord;
-                            usernameRecord.activate = true; usernameRecord.index = 1;    usernameRecord.length = strlen(deviceIdentity); usernameRecord.data = new char[usernameRecord.length]; bcopy(deviceIdentity, usernameRecord.data, usernameRecord.length);
+                            usernameRecord.activate = true;
+                            usernameRecord.index = 1;
+                            usernameRecord.length = device.identity.length();
+                            usernameRecord.data = new char[usernameRecord.length]; bcopy(device.identityAsChar(), usernameRecord.data, usernameRecord.length);
                             returnTLV8->addRecord(usernameRecord);
                         }
                         
+                        for(unsigned int deviceNr=0; deviceNr<devices->size();deviceNr++)
                         {
+                            DeviceStruct device = devices->at(deviceNr);
+                        
                             /*
                              * Generate Signature
                              */
@@ -378,7 +395,7 @@ void handlePairSeup(int subSocket, char *buffer) {
                             uint8_t output[150];
                             hkdf((const unsigned char*)salt, strlen(salt), (const unsigned char*)secretKey->data, secretKey->length, (const unsigned char*)info, strlen(info), output, 32);
                             
-                            bcopy(deviceIdentity, &output[32], strlen(deviceIdentity));
+                            bcopy(device.identityAsChar(), &output[32], device.identity.length());
                             
                             char *signature = new char[64];
                             ed25519_secret_key edSecret;
@@ -386,8 +403,8 @@ void handlePairSeup(int subSocket, char *buffer) {
                             ed25519_public_key edPubKey;
                             ed25519_publickey(edSecret, edPubKey);
                             
-                            bcopy(edPubKey, &output[32+strlen(deviceIdentity)], 32);
-                            ed25519_sign(output, 64+strlen(deviceIdentity), (const unsigned char*)edSecret, (const unsigned char*)edPubKey, (unsigned char *)signature);
+                            bcopy(edPubKey, &output[32+device.identity.length()], 32);
+                            ed25519_sign(output, 64+device.identity.length(), (const unsigned char*)edSecret, (const unsigned char*)edPubKey, (unsigned char *)signature);
                             PHKNetworkMessageDataRecord signatureRecord;
                             signatureRecord.activate = true; signatureRecord.data = signature;   signatureRecord.index = 10;    signatureRecord.length = 64;
                             returnTLV8->addRecord(signatureRecord);
@@ -468,7 +485,7 @@ void handlePairSeup(int subSocket, char *buffer) {
     SRP_free(srp);
 }
 
-void handlePairVerify(int subSocket, char *buffer) {
+void PHKConnection::handlePairVerify(int subSocket, char *buffer) const {
     bool end = false;
     unsigned char state = 1;
     
@@ -496,82 +513,87 @@ void handlePairVerify(int subSocket, char *buffer) {
 #if HomeKitLog == 1
                 printf("Pair Verify M1\n");
 #endif
-                bcopy(msg.data.dataPtrForIndex(3), controllerPublicKey, 32);
-                for (short i = 0; i < sizeof(secretKey); i++) {
-                    secretKey[i] = rand();
-                }
-                curve25519_donna((u8*)publicKey, (const u8 *)secretKey, (const u8 *)curveBasePoint);
-                
-                curve25519_donna(sharedKey, secretKey, controllerPublicKey);
-                
-                char *temp = new char[100];
-                bcopy(publicKey, temp, 32);
-                bcopy(deviceIdentity, &temp[32], strlen(deviceIdentity));
-                bcopy(controllerPublicKey, &temp[32+strlen(deviceIdentity)], 32);
-                
-                PHKNetworkMessageDataRecord signRecord;
-                signRecord.activate = true; signRecord.data = new char[64]; signRecord.index = 10;  signRecord.length = 64;
-                
-                ed25519_secret_key edSecret;
-                bcopy(accessorySecretKey, edSecret, sizeof(edSecret));
-                ed25519_public_key edPubKey;
-                ed25519_publickey(edSecret, edPubKey);
-                
-                ed25519_sign((const unsigned char *)temp, 64+strlen(deviceIdentity), edSecret, edPubKey, (unsigned char *)signRecord.data);
-                delete [] temp;
-                
-                PHKNetworkMessageDataRecord idRecord;
-                idRecord.activate = true;   idRecord.data = new char[strlen(deviceIdentity)]; strcpy(idRecord.data, deviceIdentity); idRecord.index = 1; idRecord.length = (unsigned int)strlen(deviceIdentity);
-                PHKNetworkMessageDataRecord pubKeyRecord;
-                pubKeyRecord.activate = true;   pubKeyRecord.data = new char[32];bcopy(publicKey, pubKeyRecord.data, 32);  pubKeyRecord.index = 3; pubKeyRecord.length = 32;
-                
-                PHKNetworkMessageData data;
-                response.data.addRecord(pubKeyRecord);
-                data.addRecord(signRecord);
-                data.addRecord(idRecord);
-                
-                unsigned char salt[] = "Pair-Verify-Encrypt-Salt";
-                unsigned char info[] = "Pair-Verify-Encrypt-Info";
-                
-                int i = hkdf(salt, 24, sharedKey, 32, info, 24, enKey, 32);
-                const char *plainMsg = 0;   unsigned short msgLen = 0;
-                data.rawData(&plainMsg, &msgLen);
-                
-                char *encryptMsg = new char[msgLen+16];
-                char *polyKey = new char[64];   bzero(polyKey, 64);
-                
-                char zero[64];  bzero(zero, 64);
-                
-                chacha20_ctx chacha;
-                chacha20_setup(&chacha, enKey, 32, (uint8_t *)"PV-Msg02");
-                chacha20_encrypt(&chacha, (uint8_t *)zero, (uint8_t *)polyKey, 64);
-                chacha20_encrypt(&chacha, (uint8_t *)plainMsg, (uint8_t *)encryptMsg, msgLen);
-                
-                delete [] plainMsg;
-                
-                poly1305_context poly;
-                poly1305_init(&poly, (const unsigned char *)polyKey);
-                poly1305_update(&poly, (unsigned char *)encryptMsg, msgLen);
-                
+                for(unsigned int deviceNr=0; deviceNr<devices->size(); deviceNr++)
                 {
-                    char *waste = new char[16];
-                    bzero(waste, 16);
-                    poly1305_update(&poly, (const unsigned char *)waste, 16-msgLen%16);
-                    unsigned long long _len;
-                    _len = 0;
-                    poly1305_update(&poly, (const unsigned char *)&_len, 8);
-                    _len = msgLen;
-                    poly1305_update(&poly, (const unsigned char *)&_len, 8);
-                    delete [] waste;
+                    DeviceStruct device = devices->at(deviceNr);
+                    
+                    bcopy(msg.data.dataPtrForIndex(3), controllerPublicKey, 32);
+                    for (short i = 0; i < sizeof(secretKey); i++) {
+                        secretKey[i] = rand();
+                    }
+                    curve25519_donna((u8*)publicKey, (const u8 *)secretKey, (const u8 *)curveBasePoint);
+                    
+                    curve25519_donna(sharedKey, secretKey, controllerPublicKey);
+                    
+                    char *temp = new char[100];
+                    bcopy(publicKey, temp, 32);
+                    bcopy(device.identityAsChar(), &temp[32], device.identity.length());
+                    bcopy(controllerPublicKey, &temp[32+device.identity.length()], 32);
+                    
+                    PHKNetworkMessageDataRecord signRecord;
+                    signRecord.activate = true; signRecord.data = new char[64]; signRecord.index = 10;  signRecord.length = 64;
+                    
+                    ed25519_secret_key edSecret;
+                    bcopy(accessorySecretKey, edSecret, sizeof(edSecret));
+                    ed25519_public_key edPubKey;
+                    ed25519_publickey(edSecret, edPubKey);
+                    
+                    ed25519_sign((const unsigned char *)temp, 64+device.identity.length(), edSecret, edPubKey, (unsigned char *)signRecord.data);
+                    delete [] temp;
+                    
+                    PHKNetworkMessageDataRecord idRecord;
+                    idRecord.activate = true;   idRecord.data = new char[device.identity.length()]; strcpy(idRecord.data, device.identityAsChar()); idRecord.index = 1; idRecord.length = (unsigned int)device.identity.length();
+                    PHKNetworkMessageDataRecord pubKeyRecord;
+                    pubKeyRecord.activate = true;   pubKeyRecord.data = new char[32];bcopy(publicKey, pubKeyRecord.data, 32);  pubKeyRecord.index = 3; pubKeyRecord.length = 32;
+                    
+                    PHKNetworkMessageData data;
+                    response.data.addRecord(pubKeyRecord);
+                    data.addRecord(signRecord);
+                    data.addRecord(idRecord);
+                    
+                    unsigned char salt[] = "Pair-Verify-Encrypt-Salt";
+                    unsigned char info[] = "Pair-Verify-Encrypt-Info";
+                    
+                    int i = hkdf(salt, 24, sharedKey, 32, info, 24, enKey, 32);
+                    const char *plainMsg = 0;   unsigned short msgLen = 0;
+                    data.rawData(&plainMsg, &msgLen);
+                    
+                    char *encryptMsg = new char[msgLen+16];
+                    char *polyKey = new char[64];   bzero(polyKey, 64);
+                    
+                    char zero[64];  bzero(zero, 64);
+                    
+                    chacha20_ctx chacha;
+                    chacha20_setup(&chacha, enKey, 32, (uint8_t *)"PV-Msg02");
+                    chacha20_encrypt(&chacha, (uint8_t *)zero, (uint8_t *)polyKey, 64);
+                    chacha20_encrypt(&chacha, (uint8_t *)plainMsg, (uint8_t *)encryptMsg, msgLen);
+                    
+                    delete [] plainMsg;
+                    
+                    poly1305_context poly;
+                    poly1305_init(&poly, (const unsigned char *)polyKey);
+                    poly1305_update(&poly, (unsigned char *)encryptMsg, msgLen);
+                    
+                    {
+                        char *waste = new char[16];
+                        bzero(waste, 16);
+                        poly1305_update(&poly, (const unsigned char *)waste, 16-msgLen%16);
+                        unsigned long long _len;
+                        _len = 0;
+                        poly1305_update(&poly, (const unsigned char *)&_len, 8);
+                        _len = msgLen;
+                        poly1305_update(&poly, (const unsigned char *)&_len, 8);
+                        delete [] waste;
+                    }
+                    poly1305_finish(&poly, (unsigned char *)&encryptMsg[msgLen]);
+                    
+                    PHKNetworkMessageDataRecord encryptRecord;
+                    encryptRecord.activate = true;  encryptRecord.index = 5; encryptRecord.length = msgLen+16;  encryptRecord.data = new char[encryptRecord.length];    bcopy(encryptMsg, encryptRecord.data, encryptRecord.length);
+                    response.data.addRecord(encryptRecord);
+                    
+                    delete [] encryptMsg;
+                    delete [] polyKey;
                 }
-                poly1305_finish(&poly, (unsigned char *)&encryptMsg[msgLen]);
-                
-                PHKNetworkMessageDataRecord encryptRecord;
-                encryptRecord.activate = true;  encryptRecord.index = 5; encryptRecord.length = msgLen+16;  encryptRecord.data = new char[encryptRecord.length];    bcopy(encryptMsg, encryptRecord.data, encryptRecord.length);
-                response.data.addRecord(encryptRecord);
-                
-                delete [] encryptMsg;
-                delete [] polyKey;
             }
                 break;
             case 3: {

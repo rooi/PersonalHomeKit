@@ -9,6 +9,8 @@
 #ifndef __Workbench__PHKNetworkIP__
 #define __Workbench__PHKNetworkIP__
 
+#include "PHKAccessory.h"
+
 #include <stdio.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -20,16 +22,34 @@ using namespace std;
 #define IPv4 1
 #define IPv6 0
 
+class PHKConnection {
+public:
+    PHKConnection(Devices* devices_) : socketNumber(-1), devices(devices_) {};
+    
+    static void * connectionLoopFunc(void * This) {((PHKConnection *)This)->connectionLoop(); return NULL;}
+    void* connectionLoop() const;
+    
+    void handlePairSetup(int subSocket, char *buffer) const;
+    void handlePairVerify(int subSocket, char *buffer) const;
+    
+    pthread_t thread;
+    int socketNumber;
+    
+    Devices* devices;
+};
+
 void broadcastMessage(char *buffer, size_t len);
 
 class PHKNetworkIP {
-    void setupSocket();
-    TXTRecordRef buildTXTRecord();
-    void handlePairSeup(int subSocket, char *buffer) const;
-    void handlePairVerify(int subSocket, char *buffer) const;
+    void setupSocket(DeviceStruct device);
+    TXTRecordRef buildTXTRecord(DeviceStruct device);
+    
+    Devices* devices;
+
 public:
-    PHKNetworkIP();
-    void handleConnection() const;
+    PHKNetworkIP(Devices* devices);
+    void handleConnection();
+    static vector<PHKConnection> connections;
     ~PHKNetworkIP();
 };
 

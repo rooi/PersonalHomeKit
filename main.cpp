@@ -17,11 +17,21 @@ extern "C" {
 using namespace std;
 
 int main(int argc, const char * argv[]) {
+    
+    Devices devices;
+    
+    DeviceStruct device1;
+    device1.name = "Night Light";
+    device1.identity = "12:00:54:23:51:13";
+    device1.uuid = "9FCF7180-6CAA-4174-ABC0-E3FAE58E3ADD";
+    
+    devices.push_back(device1);
+    
     // insert code here...
-    initAccessorySet();
+    initAccessorySet(&devices);
     setupPort();
     
-    PHKNetworkIP networkIP;
+    PHKNetworkIP networkIP(&devices);
     do {
         networkIP.handleConnection();
     } while (true);

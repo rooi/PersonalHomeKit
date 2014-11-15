@@ -5,16 +5,17 @@
 //  Created by Wai Man Chan on 9/27/14.
 //
 //
+#ifndef __Workbench__PHKAccessory__
+#define __Workbench__PHKAccessory__
 
 #include <string.h>
+#include <sstream>
 #include <strings.h>
 #define __STDC_LIMIT_MACROS
 #include <stdint.h>
 extern "C" {
 #include <stdlib.h>
 }
-
-#include "PHKNetworkIP.h"
 
 #include "PHKControllerRecord.h"
 
@@ -26,6 +27,21 @@ extern "C" {
 
 
 using namespace std;
+
+struct DeviceStruct {
+    DeviceStruct(string name_="", string id_="", string uuid_="")
+      : name(name_), identity(id_), uuid(uuid_) {};
+    string name;
+    string identity;
+    string uuid;
+    
+    const char* nameAsChar()     {return name.c_str();};
+    const char* identityAsChar() {return identity.c_str();};
+    const char* uuidAsChar()     {return uuid.c_str();};
+};
+
+struct Devices : public vector<DeviceStruct> {
+};
 
 typedef enum {
     charType_adminOnlyAccess    = 0x1,
@@ -244,16 +260,16 @@ class infoService: public Service {
     stringCharacteristics serialNumber;
     identifyCharacteristics identify;
 public:
-    infoService(int index): Service(index, charType_accessoryInfo),
+    infoService(int index, DeviceStruct device): Service(index, charType_accessoryInfo),
     name(index+1, charType_serviceName, premission_read, 0),
     manufactuer(index+2, charType_manufactuer, premission_read, 0),
     modelName(index+3, charType_modelName, premission_read, 0),
     serialNumber(index+4, charType_serialNumber, premission_read, 0),
     identify(index+5) {
-        name.setValue(deviceName);
+        name.setValue(device.nameAsChar());
         manufactuer.setValue(manufactuerName);
-        modelName.setValue(deviceName);
-        serialNumber.setValue(deviceUUID);
+        modelName.setValue(device.nameAsChar());
+        serialNumber.setValue(device.uuidAsChar());
     }
     virtual short numberOfCharacteristics() { return 5; }
     virtual characteristics *characteristicsAtIndex(int index) {
@@ -273,3 +289,5 @@ public:
     }
 };
 void handleAccessory(const char *request, unsigned int requestLen, char **reply, unsigned int *replyLen);
+
+#endif /* __Workbench__PHKAccessory__ */
