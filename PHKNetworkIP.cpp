@@ -158,8 +158,8 @@ void *connectionLoop(void *argument) {
         printf("Start Connect: %d\n", subSocket);
         
         do {
-            char *buffer = new char[4096];
-            len = read(*(int*)argument, buffer, 4096);
+            char *buffer = new char[8192];
+            len = read(*(int*)argument, buffer, 8192);
             PHKNetworkMessage msg(buffer);
             if (len > 0) {
                 if (!strcmp(msg.directory, "pair-setup")){
@@ -470,7 +470,7 @@ void handlePairSeup(int subSocket, char *buffer) {
 #endif
         }
         
-    } while (read(subSocket, (void *)buffer, 4096) > 0);
+    } while (read(subSocket, (void *)buffer, 8192) > 0);
     SRP_free(srp);
 }
 
@@ -652,7 +652,7 @@ void handlePairVerify(int subSocket, char *buffer) {
         response.getBinaryPtr(&repBuffer, &repLen);
         write(subSocket, repBuffer, repLen);
         delete [] repBuffer;
-    } while (!end && read(subSocket, buffer, 4096) > 0);
+    } while (!end && read(subSocket, buffer, 8192) > 0);
     
     char *decryptData = new char[2048];
     
@@ -663,8 +663,8 @@ void handlePairVerify(int subSocket, char *buffer) {
 #endif
     
     do {
-        bzero(buffer, 4096);
-        len = read(subSocket, buffer, 4096);
+        bzero(buffer, 8192);
+        len = read(subSocket, buffer, 8192);
         
         if (len > 0) {
             uint16_t msgLen = (uint8_t)buffer[1]*256+(uint8_t)*buffer;
@@ -919,12 +919,15 @@ PHKNetworkMessageDataRecord &PHKNetworkMessageDataRecord::operator=(const PHKNet
     activate = r.activate;
     length = r.length;
     if (data)
+    {
         delete [] data;
+        data = NULL;
+    }
     data = new char[length];
     bcopy(r.data, data, length);
     return *this;
 }
 
 PHKNetworkMessageDataRecord::~PHKNetworkMessageDataRecord() {
-    if (length) delete [] data;
+    if (length && data) delete [] data;
 }

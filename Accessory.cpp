@@ -34,7 +34,39 @@ string GetStdoutFromCommand(string cmd) {
     return data;
 }
 
+Accessory* CreateLightWaveRFAccessory(string name, string type)
+{
+    Accessory *lightAcc = new Accessory();
+    
+    string model = "Light";
+    if(type == "D") model = "Dimmer";
+    
+    addInfoServiceToAccessory(lightAcc, name.c_str(), "KlikAanKlikUit", model.c_str(), "12345678");
+
+    Service *lightService = new Service(charType_lightBulb);
+    lightAcc->addService(lightService);
+
+    stringCharacteristics *lightServiceName = new stringCharacteristics(charType_serviceName, premission_read, 0);
+    lightServiceName->setValue(name.c_str());
+    lightAcc->addCharacteristics(lightService, lightServiceName);
+
+    boolCharacteristics *powerState = new boolCharacteristics(charType_on, premission_read|premission_write);
+    powerState->setValue("LightSwitch");
+    lightAcc->addCharacteristics(lightService, powerState);
+
+    if(model == "Dimmer") {
+        intCharacteristics *brightnessState = new intCharacteristics(charType_brightness, premission_read|premission_write, 0, 100, 1, unit_percentage);
+        brightnessState->setValue("LightDimmer");
+        lightAcc->addCharacteristics(lightService, brightnessState);
+    }
+    
+    return lightAcc;
+}
+
 void initAccessorySet() {
+    printf("Initial Accessory\n");
+    accSet = new AccessorySet();
+    
     // Read in lightwaverf login details
     string line;
     string usernameLRF = "";
@@ -115,6 +147,11 @@ void initAccessorySet() {
             printf("Device: name = "); printf(thisDeviceName.c_str());
             printf(" type = "); printf(thisDeviceType.c_str()); printf("\n");
             
+            // Create the accessory
+            if(!thisDeviceName.empty()) {
+                accSet->addAccessory(CreateLightWaveRFAccessory(thisDeviceName, thisDeviceType));
+            }
+            
             // Next device
             devicesString = devicesString.substr(deviceEnd + 1);
             deviceBegin = devicesString.find("{");
@@ -140,25 +177,4 @@ void initAccessorySet() {
         devicesEnd = lightwaverfConfig.find("]}");
         
     }
-    
-    printf("Initial Accessory\n");
-    accSet = new AccessorySet();
-    Accessory *lightAcc = new Accessory();
-    addInfoServiceToAccessory(lightAcc, "Light 1", "ET", "Light", "12345678");
-    accSet->addAccessory(lightAcc);
-    
-    Service *lightService = new Service(charType_lightBulb);
-    lightAcc->addService(lightService);
-    
-    stringCharacteristics *lightServiceName = new stringCharacteristics(charType_serviceName, premission_read, 0);
-    lightServiceName->setValue("Light");
-    lightAcc->addCharacteristics(lightService, lightServiceName);
-    
-    boolCharacteristics *powerState = new boolCharacteristics(charType_on, premission_read|premission_write);
-    powerState->setValue("Light");
-    lightAcc->addCharacteristics(lightService, powerState);
-    
-    intCharacteristics *brightnessState = new intCharacteristics(charType_brightness, premission_read|premission_write, 0, 100, 1, unit_percentage);
-    brightnessState->setValue("Light");
-    lightAcc->addCharacteristics(lightService, brightnessState);
 };
