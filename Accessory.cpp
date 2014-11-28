@@ -6,6 +6,8 @@
 
 #include "PHKAccessory.h"
 
+#include "Configuration.h"
+
 #include <fstream>
 
 //Global Level of light strength
@@ -71,8 +73,73 @@ void initAccessorySet() {
     string lightwaverfConfig = GetStdoutFromCommand(lightwaverfCmd);
     
 #if HomeKitLog == 1
-    printf(lightwaverfConfig.c_str());
+    printf(lightwaverfConfig.c_str()); printf("\n");
 #endif // HomeKitLog
+    
+    // Find room
+    size_t roomBegin = lightwaverfConfig.find("{\"room\"=>[{\"name\"==>\"") + 21;
+    string roomName = "";
+    if(roomBegin!=string::npos) roomName = lightwaverfConfig.substr(roomBegin);
+    size_t roomEnd = roomName.find("\"");
+    if(roomEnd!=string::npos) roomName = roomName.substr(0,roomEnd);
+    printf("Room = "); printf(roomName.c_str()); printf("\n");
+    
+    size_t devicesBegin = lightwaverfConfig.find("\"device\"=>[") + 11;
+    size_t devicesEnd = lightwaverfConfig.find("]}, ");
+    int rooms = 0;
+    while( devicesBegin!=string::npos && devicesEnd!=string::npos && rooms < 100) {
+        rooms++;
+        string devicesString = lightwaverfConfig.substr(devicesBegin,devicesEnd-devicesBegin);
+        printf(devicesString.c_str()); printf("\n");
+        
+        // Find devices in this room
+        size_t deviceBegin = devicesString.find("{");
+        size_t deviceEnd = devicesString.find("}");
+        int devicesInRoom = 0;
+        while (deviceBegin!=string::npos && devicesEnd!=string::npos && devicesInRoom < 100) {
+            devicesInRoom++;
+            string deviceString = devicesString.substr(deviceBegin, deviceEnd-deviceBegin);
+            
+            string thisDeviceName = "";
+            size_t deviceNameBegin = deviceString.find("\"name\"=>\"");
+            if(deviceNameBegin!=string::npos) thisDeviceName = deviceString.substr(deviceNameBegin + 9);
+            size_t deviceNameEnd = thisDeviceName.find("\"");
+            if(deviceNameEnd!=string::npos) thisDeviceName = thisDeviceName.substr(0,deviceNameEnd);
+            
+            string thisDeviceType = "";
+            size_t deviceTypeBegin = deviceString.find("\"type\"=>\"");
+            if(deviceTypeBegin!=string::npos) thisDeviceType = deviceString.substr(deviceTypeBegin + 9);
+            size_t deviceTypeEnd = thisDeviceType.find("\"");
+            if(deviceTypeEnd!=string::npos) thisDeviceType = thisDeviceType.substr(0,deviceTypeEnd);
+            
+            printf("Device: name = "); printf(thisDeviceName.c_str());
+            printf(" type = "); printf(thisDeviceType.c_str()); printf("\n");
+            
+            // Next device
+            devicesString = devicesString.substr(deviceEnd + 1);
+            deviceBegin = devicesString.find("{");
+            deviceEnd = devicesString.find("}");
+        }
+        
+        
+        // Find next room
+        lightwaverfConfig = lightwaverfConfig.substr(devicesEnd+4);
+        
+        roomBegin = lightwaverfConfig.find("{\"name\"=>\"");
+        if(roomBegin!= string::npos) {
+            roomName = lightwaverfConfig.substr(roomBegin + 10);
+            roomEnd = roomName.find("\"");
+            if(roomEnd!=string::npos) {
+                roomName = roomName.substr(0,roomEnd);
+                printf("Room = "); printf(roomName.c_str()); printf("\n");
+            }
+        }
+        
+        // Find next devices in this room
+        devicesBegin = lightwaverfConfig.find("\"device\"=>[");
+        devicesEnd = lightwaverfConfig.find("]}");
+        
+    }
     
     printf("Initial Accessory\n");
     accSet = new AccessorySet();
