@@ -20,7 +20,7 @@ int fanSpeedVal = 0;
 
 AccessorySet *accSet;
 
-string GetStdoutFromCommand(string cmd) {
+static string GetStdoutFromCommand(string cmd) {
     
     string data;
     FILE * stream;
@@ -45,17 +45,25 @@ class LightwaveRFCommandQueue {
     static void* process(void* ptr) {
         queue<string>* cmds = (queue<string>*)ptr;
         while(cmds->size()) {
-            done = false;
             pthread_mutex_lock(&lock);
-#if HomeKitLog == 1
-            printf(cmds->front().c_str()); printf("\n");
-#endif
-            system(cmds->front().c_str());
+            string cmd = cmds->front();
             cmds->pop();
             pthread_mutex_unlock(&lock);
+#if HomeKitLog == 1
+            printf(cmd.c_str()); printf("\n");
+#endif
+            GetStdoutFromCommand(cmd);
             sleep(1);
         }
+#if HomeKitLog == 1
+        printf("Setting processing thread to done\n");
+#endif
+        pthread_mutex_lock(&lock);
         done = true;
+        pthread_mutex_unlock(&lock);
+#if HomeKitLog == 1
+        printf("Finished processing commands\n");
+#endif
     }
 public:
     LightwaveRFCommandQueue() {
@@ -69,8 +77,17 @@ public:
     }
     void addCommand(string cmd) {
         pthread_mutex_lock(&lock);
+#if HomeKitLog == 1
+        printf(cmd.c_str()); printf("\n");
+#endif
         commands.push(cmd);
-        if(done) pthread_create(&this->thread, NULL, LightwaveRFCommandQueue::process, &commands);
+        if(done) {
+            done = false;
+#if HomeKitLog == 1
+            printf("Creating command thread\n");
+#endif
+            pthread_create(&this->thread, NULL, LightwaveRFCommandQueue::process, &commands);
+        }
         pthread_mutex_unlock(&lock);
     }
 };
