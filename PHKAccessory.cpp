@@ -9,7 +9,6 @@
 #include "PHKAccessory.h"
 #include "Configuration.h"
 
-
 const char hapJsonType[] = "application/hap+json";
 const char pairingTlv8Type[] = "application/pairing+tlv8";
 
@@ -335,7 +334,7 @@ void handleAccessory(const char *request, unsigned int requestLen, char **reply,
     }
     path[i] = 0;
     
-    const char *dataPtr = request;
+    char *dataPtr = (char*)request;
     while (true) {
         dataPtr = &dataPtr[1];
         if (dataPtr[0] == '\r' && dataPtr[1] == '\n' && dataPtr[2] == '\r' && dataPtr[3] == '\n') break;
@@ -435,35 +434,50 @@ void handleAccessory(const char *request, unsigned int requestLen, char **reply,
         } else if (strncmp(method, "PUT", 3) == 0) {
             //Change characteristics
             int aid = 0;    int iid = 0; char value[16];
-            sscanf(dataPtr, "{\"characteristics\":[{\"aid\":%d,\"iid\":%d,\"value\":%s}]}", &aid, &iid, value);
-            if (aid ==0 && iid == 0) {
-                sscanf(dataPtr, "{\"characteristics\":[{\"remote\":true,\"value\":%[^,]s,\"aid\":%d,\"iid\":%d}]}", value, &aid, &iid);
-            }
+            //sscanf(dataPtr, "{\"characteristics\":[{\"aid\":%d,\"iid\":%d,\"value\":%s}]}", &aid, &iid, value);
+            
+            char * pch;
+            pch = strtok (dataPtr,"[{}]");
+            while (pch != NULL) {
 #if HomeKitLog == 1
-            printf("Ask to change one characteristics: %d . %d -> %s\n", aid, iid, value);
+                printf ("%s\n",pch);
 #endif
-            Accessory *a = accSet->accessoryAtIndex(aid);
-            if (a==NULL) {
-                statusCode = 400;
-            } else {
-                characteristics *c = a->characteristicsAtIndex(iid);
-                if (c==NULL) {
-                    statusCode = 400;
-                } else {
-                    if (c->writable()) {
-                        c->setValue(value);
-                        
-                        statusCode = 204;
-                        if (c->update());
-                            //Broadcast change to everyone
-                            //announce();
-                    } else {
+            
+                if(sscanf(pch, "\"aid\":%d,\"iid\":%d,\"value\":%s", &aid, &iid, value) == 3) {
+                
+                    if (aid ==0 && iid == 0) {
+                        //sscanf(dataPtr, "{\"characteristics\":[{\"remote\":true,\"value\":%[^,]s,\"aid\":%d,\"iid\":%d}]}", value, &aid, &iid);
+                        sscanf(pch, "\"remote\":true,\"value\":%[^,]s,\"aid\":%d,\"iid\":%d", value, &aid, &iid);
+                    }
+#if HomeKitLog == 1
+                    printf("Ask to change one characteristics: %d . %d -> %s\n", aid, iid, value);
+#endif
+                    Accessory *a = accSet->accessoryAtIndex(aid);
+                    if (a==NULL) {
                         statusCode = 400;
+                    } else {
+                        characteristics *c = a->characteristicsAtIndex(iid);
+                        if (c==NULL) {
+                            statusCode = 400;
+                        } else {
+                            if (c->writable()) {
+                                c->setValue(value);
+                                
+                                statusCode = 204;
+                                if (c->update());
+                                    //Broadcast change to everyone
+                                    //announce();
+                            } else {
+                                statusCode = 400;
+                            }
+                        }
+                        
                     }
                 }
                 
+                pch = strtok (NULL, "[{}]");
+                
             }
-            
             
             
         } else {
@@ -479,9 +493,9 @@ void handleAccessory(const char *request, unsigned int requestLen, char **reply,
         statusCode = 404;
     }
     
-    *reply = new char[2048];
-    bzero(*reply, 2048);
-    int len = snprintf(*reply, 2048, "%s %d OK\r\n\
+    *reply = new char[8192];
+    bzero(*reply, 8192);
+    int len = snprintf(*reply, 8192, "%s %d OK\r\n\
 Content-Type: %s\r\n\
 Content-Length: %u\r\n\r\n", protocol, statusCode, returnType, replyDataLen);
     

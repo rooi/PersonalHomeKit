@@ -62,6 +62,8 @@ pthread_t threads[numberOfClient];
 #endif
 int connection[numberOfClient];
 
+//pthread_mutex_t globalLock;
+
 int _socket_v4, _socket_v6;
 DNSServiceRef netServiceV4, netServiceV6;
 
@@ -133,6 +135,11 @@ void PHKNetworkIP::setupSocket() {
 }
 
 PHKNetworkIP::PHKNetworkIP() {
+    //if (pthread_mutex_init(&globalLock, NULL) != 0)
+    //{
+    //    printf("\n mutex init failed\n");
+    //}
+    
     SRP_initialize_library();
     srand((unsigned int)time(NULL));
     for (int i = 0; i < numberOfClient; i++) {
@@ -162,6 +169,7 @@ void *connectionLoop(void *argument) {
             len = read(*(int*)argument, buffer, 8192);
             PHKNetworkMessage msg(buffer);
             if (len > 0) {
+                //pthread_mutex_lock(&globalLock);
                 if (!strcmp(msg.directory, "pair-setup")){
                     
                     /*
@@ -174,6 +182,7 @@ void *connectionLoop(void *argument) {
                 else if (!strcmp(msg.directory, "pair-verify")){
                     handlePairVerify(*(int*)argument, buffer);
                 }
+                //pthread_mutex_unlock(&globalLock);
             }
             
             delete [] buffer;
@@ -747,6 +756,7 @@ void handlePairVerify(int subSocket, char *buffer) {
 
 //Object Logic
 PHKNetworkIP::~PHKNetworkIP() {
+    //pthread_mutex_destroy(&globalLock);
     DNSServiceRefDeallocate(netServiceV4);
 }
 

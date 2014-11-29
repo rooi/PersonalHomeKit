@@ -9,6 +9,8 @@
 #include "Configuration.h"
 
 #include <fstream>
+#include <queue>
+#include <pthread.h>
 
 //Global Level of light strength
 int lightStength = 0;
@@ -34,14 +36,120 @@ string GetStdoutFromCommand(string cmd) {
     return data;
 }
 
-Accessory* CreateLightWaveRFAccessory(string name, string type)
+class LightwaveRFCommandQueue {
+    queue<string> commands;
+    pthread_t thread;
+    static pthread_mutex_t lock;
+    static bool done;
+    static void* process(void* ptr) {
+        queue<string>* cmds = (queue<string>*)ptr;
+        while(cmds->size()) {
+            done = false;
+            pthread_mutex_lock(&lock);
+#if HomeKitLog == 1
+            printf(cmds->front().c_str()); printf("\n");
+#endif
+            system(cmds->front().c_str());
+            cmds->pop();
+            pthread_mutex_unlock(&lock);
+            sleep(1);
+        }
+        done = true;
+    }
+public:
+    LightwaveRFCommandQueue() {
+        if (pthread_mutex_init(&lock, NULL) != 0)
+        {
+            printf("\n mutex init failed\n");
+        }
+    }
+    virtual ~LightwaveRFCommandQueue() {
+        pthread_mutex_destroy(&lock);
+    }
+    void addCommand(string cmd) {
+        pthread_mutex_lock(&lock);
+        commands.push(cmd);
+        if(done) pthread_create(&this->thread, NULL, LightwaveRFCommandQueue::process, &commands);
+        pthread_mutex_unlock(&lock);
+    }
+};
+bool LightwaveRFCommandQueue::done = true;
+pthread_mutex_t LightwaveRFCommandQueue::lock;
+
+LightwaveRFCommandQueue lightwaveRFCommandQueue;
+
+class lightwaveRFPowerState: public boolCharacteristics {
+    string _room;
+    string _name;
+public:
+    lightwaveRFPowerState(string room, string name, unsigned short _type, int _premission): boolCharacteristics(_type, _premission), _room(room), _name(name) {}
+    string value() {
+        if (lightStength > 0)
+            return "1";
+        return "0";
+    }
+    void setValue(string str) {
+        this->boolCharacteristics::setValue(str);
+        string cmd = "lightwaverf ";
+        cmd += "\""; cmd += _room; cmd += "\" ";
+        cmd += "\""; cmd += _name; cmd += "\" ";
+        if (_value) {
+            lightStength = 255;
+            setLightStrength(255);
+            cmd += "on";
+        } else {
+            lightStength = 0;
+            setLightStrength(0);
+            cmd += "off";
+        }
+        //system(cmd.c_str());
+        lightwaveRFCommandQueue.addCommand(cmd);
+#if HomeKitLog == 1
+        string msg = "Setting ";
+        msg += _room; msg += " ";
+        msg += _name; msg += " ";
+        msg += "light power state\n";
+        printf(msg.c_str());
+#endif // HomeKitLog
+    }
+};
+
+class lightwaveRFBrightness: public intCharacteristics {
+    string _room;
+    string _name;
+public:
+    lightwaveRFBrightness(string room, string name, unsigned short _type, int _premission, int minVal, int maxVal, int step, unit charUnit):intCharacteristics(_type, _premission, minVal, maxVal, step, charUnit), _room(room), _name(name) {}
+    void setValue(string str) {
+        this->intCharacteristics::setValue(str);
+        lightStength = _value;
+        setLightStrength(2.55*_value);
+        
+        string cmd = "lightwaverf ";
+        cmd += "\""; cmd += _room; cmd += "\" ";
+        cmd += "\""; cmd += _name; cmd += "\" ";
+        cmd += std::to_string(_value);
+        //system(cmd.c_str());
+        lightwaveRFCommandQueue.addCommand(cmd);
+#if HomeKitLog == 1
+        string msg = "Setting ";
+        msg += _room; msg += " ";
+        msg += _name; msg += " ";
+        msg += "light strenght\n";
+        printf(msg.c_str());
+#endif // HomeKitLog
+    }
+};
+
+Accessory* CreateLightWaveRFAccessory(string room, string name, string type)
 {
     Accessory *lightAcc = new Accessory();
     
     string model = "Light";
     if(type == "D") model = "Dimmer";
     
-    addInfoServiceToAccessory(lightAcc, name.c_str(), "KlikAanKlikUit", model.c_str(), "12345678");
+    string serial = "123" + name + "4";
+    
+    addInfoServiceToAccessory(lightAcc, name.c_str(), "KlikAanKlikUit", model.c_str(), serial.c_str());
 
     Service *lightService = new Service(charType_lightBulb);
     lightAcc->addService(lightService);
@@ -50,12 +158,12 @@ Accessory* CreateLightWaveRFAccessory(string name, string type)
     lightServiceName->setValue(name.c_str());
     lightAcc->addCharacteristics(lightService, lightServiceName);
 
-    boolCharacteristics *powerState = new boolCharacteristics(charType_on, premission_read|premission_write);
+    lightwaveRFPowerState *powerState = new lightwaveRFPowerState(room, name, charType_on, premission_read|premission_write);
     powerState->setValue("LightSwitch");
     lightAcc->addCharacteristics(lightService, powerState);
 
     if(model == "Dimmer") {
-        intCharacteristics *brightnessState = new intCharacteristics(charType_brightness, premission_read|premission_write, 0, 100, 1, unit_percentage);
+        lightwaveRFBrightness *brightnessState = new lightwaveRFBrightness(room, name, charType_brightness, premission_read|premission_write, 0, 100, 1, unit_percentage);
         brightnessState->setValue("LightDimmer");
         lightAcc->addCharacteristics(lightService, brightnessState);
     }
@@ -103,6 +211,7 @@ void initAccessorySet() {
     
     //system(lightwaverfCmd.c_str());
     string lightwaverfConfig = GetStdoutFromCommand(lightwaverfCmd);
+    sleep(1);
     
 #if HomeKitLog == 1
     printf(lightwaverfConfig.c_str()); printf("\n");
@@ -122,7 +231,9 @@ void initAccessorySet() {
     while( devicesBegin!=string::npos && devicesEnd!=string::npos && rooms < 100) {
         rooms++;
         string devicesString = lightwaverfConfig.substr(devicesBegin,devicesEnd-devicesBegin);
+#if HomeKitLog == 1
         printf(devicesString.c_str()); printf("\n");
+#endif
         
         // Find devices in this room
         size_t deviceBegin = devicesString.find("{");
@@ -143,13 +254,14 @@ void initAccessorySet() {
             if(deviceTypeBegin!=string::npos) thisDeviceType = deviceString.substr(deviceTypeBegin + 9);
             size_t deviceTypeEnd = thisDeviceType.find("\"");
             if(deviceTypeEnd!=string::npos) thisDeviceType = thisDeviceType.substr(0,deviceTypeEnd);
-            
+#if HomeKitLog == 1
             printf("Device: name = "); printf(thisDeviceName.c_str());
             printf(" type = "); printf(thisDeviceType.c_str()); printf("\n");
+#endif
             
             // Create the accessory
             if(!thisDeviceName.empty()) {
-                accSet->addAccessory(CreateLightWaveRFAccessory(thisDeviceName, thisDeviceType));
+                accSet->addAccessory(CreateLightWaveRFAccessory(roomName, thisDeviceName, thisDeviceType));
             }
             
             // Next device
@@ -168,7 +280,9 @@ void initAccessorySet() {
             roomEnd = roomName.find("\"");
             if(roomEnd!=string::npos) {
                 roomName = roomName.substr(0,roomEnd);
+#if HomeKitLog == 1
                 printf("Room = "); printf(roomName.c_str()); printf("\n");
+#endif
             }
         }
         

@@ -9,8 +9,8 @@
 #ifndef Workbench_Configuration_h
 #define Workbench_Configuration_h
 
-#define HomeKitLog 1
-#define HomeKitReplyHeaderLog 1
+#define HomeKitLog 0
+#define HomeKitReplyHeaderLog 0
 
 //Device Setting
 #define deviceName "HomeKit-Bridge"    //Name
