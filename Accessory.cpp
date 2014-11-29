@@ -236,7 +236,7 @@ void initAccessorySet() {
         rooms++;
         string devicesString = lightwaverfConfig.substr(devicesBegin,devicesEnd-devicesBegin);
 #if HomeKitLog == 1
-        printf(devicesString.c_str()); printf("\n");
+        //printf(devicesString.c_str()); printf("\n");
 #endif
         
         // Find devices in this room
@@ -293,6 +293,5 @@ void initAccessorySet() {
         // Find next devices in this room
         devicesBegin = lightwaverfConfig.find("\"device\"=>[");
         devicesEnd = lightwaverfConfig.find("]}");
-        
     }
 };
