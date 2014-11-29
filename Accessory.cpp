@@ -11,6 +11,7 @@
 #include <fstream>
 #include <queue>
 #include <pthread.h>
+#include <sstream>
 
 //Global Level of light strength
 int lightStength = 0;
@@ -127,7 +128,10 @@ public:
         string cmd = "lightwaverf ";
         cmd += "\""; cmd += _room; cmd += "\" ";
         cmd += "\""; cmd += _name; cmd += "\" ";
-        cmd += std::to_string(_value);
+        //cmd += std::to_string(_value);
+        std::ostringstream ostr;
+        ostr << _value;
+        cmd += ostr.str();
         //system(cmd.c_str());
         lightwaveRFCommandQueue.addCommand(cmd);
 #if HomeKitLog == 1
