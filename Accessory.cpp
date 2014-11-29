@@ -200,7 +200,7 @@ void initAccessorySet() {
     string line;
     string usernameLRF = "";
     string passwordLRF = "";
-    ifstream myfile ("../lightwaverflogin.txt");
+    ifstream myfile (lightwaveLoginFile);
     if (myfile.is_open())
     {
         int lineNr = 0;
