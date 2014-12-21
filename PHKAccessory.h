@@ -24,6 +24,11 @@ extern "C" {
 
 #include <vector>
 
+#if MCU
+#else
+#include <pthread.h>
+#endif
+
 using namespace std;
 
 typedef enum {
@@ -105,7 +110,7 @@ typedef enum {
 enum {
     premission_read = 1,
     premission_write = 1 << 1,
-    premission_update = 1 << 2  //Update = Accessory will notice the controller
+    premission_notify = 1 << 2  //Notify = Accessory will notice the controller
 };
 
 typedef enum {
@@ -115,25 +120,26 @@ typedef enum {
     unit_arcDegree
 } unit;
 
+
 class characteristics {
-protected:
+public:
+    
     const unsigned short type;
     const int premission;
-public:
     int iid;
     characteristics(unsigned short _type, int _premission): type(_type), premission(_premission) {}
     virtual string value() = 0;
     virtual void setValue(string str) = 0;
     virtual string describe() = 0;
     bool writable() { return premission&premission_write; }
-    bool update() { return premission&premission_update; }
+    bool notifiable() { return premission&premission_notify; }
 };
 
 //To store value of device state, subclass the following type
 class boolCharacteristics: public characteristics {
-protected:
-    bool _value;
 public:
+    bool _value;
+    void (*valueChangeFunctionCall)(bool oldValue, bool newValue) = NULL;
     boolCharacteristics(unsigned short _type, int _premission): characteristics(_type, _premission) {}
     virtual string value() {
         if (_value)
@@ -141,17 +147,20 @@ public:
         return "0";
     }
     virtual void setValue(string str) {
-        _value = (strncmp("true", str.c_str(), 4)==0);
+        bool newValue = (strncmp("true", str.c_str(), 4)==0);
+        if (valueChangeFunctionCall)
+            valueChangeFunctionCall(_value, newValue);
+        _value = newValue;
     }
     virtual string describe();
 };
 
 class floatCharacteristics: public characteristics {
-protected:
+public:
     float _value;
     const float _minVal, _maxVal, _step;
     const unit _unit;
-public:
+    void (*valueChangeFunctionCall)(float oldValue, float newValue) = NULL;
     floatCharacteristics(unsigned short _type, int _premission, float minVal, float maxVal, float step, unit charUnit): characteristics(_type, _premission), _minVal(minVal), _maxVal(maxVal), _step(step), _unit(charUnit) {}
     virtual string value() {
         char temp[16];
@@ -161,6 +170,8 @@ public:
     virtual void setValue(string str) {
         float temp = atof(str.c_str());
         if (temp == temp) {
+            if (valueChangeFunctionCall)
+                valueChangeFunctionCall(_value, temp);
             _value = temp;
         }
     }
@@ -168,11 +179,11 @@ public:
 };
 
 class intCharacteristics: public characteristics {
-protected:
+public:
     int _value;
     const int _minVal, _maxVal, _step;
     const unit _unit;
-public:
+    void (*valueChangeFunctionCall)(int oldValue, int newValue) = NULL;
     intCharacteristics(unsigned short _type, int _premission, int minVal, int maxVal, int step, unit charUnit): characteristics(_type, _premission), _minVal(minVal), _maxVal(maxVal), _step(step), _unit(charUnit) {
         _value = minVal;
     }
@@ -185,21 +196,25 @@ public:
         float temp = atoi(str.c_str());
         if (temp == temp) {
             _value = temp;
+            if (valueChangeFunctionCall)
+                valueChangeFunctionCall(_value, temp);
         }
     }
     virtual string describe();
 };
 
 class stringCharacteristics: public characteristics {
-protected:
+public:
     string _value;
     const unsigned short maxLen;
-public:
+    void (*valueChangeFunctionCall)(string oldValue, string newValue) = NULL;
     stringCharacteristics(unsigned short _type, int _premission, unsigned short _maxLen): characteristics(_type, _premission), maxLen(_maxLen) {}
     virtual string value() {
-        return _value;
+        return "\""+_value+"\"";
     }
     virtual void setValue(string str) {
+        if (valueChangeFunctionCall)
+            valueChangeFunctionCall(_value, str);
         _value = str;
     }
     virtual string describe();
@@ -278,6 +293,10 @@ class AccessorySet {
     vector<Accessory *> _accessories;
     int _aid = 0;
 public:
+    pthread_mutex_t accessoryMutex;
+    AccessorySet() {
+        pthread_mutex_init(&accessoryMutex, NULL);
+    }
     short numberOfAccessory() {
         return _accessories.size();
     }
@@ -303,9 +322,15 @@ public:
         }
         return exist;
     }
+    ~AccessorySet() {
+        pthread_mutex_destroy(&accessoryMutex);
+    }
     string describe();
 };
-//Since Info Service contains only constant, only add method will be provided
-void addInfoServiceToAccessory(Accessory *acc, string accName, string manufactuerName, string modelName, string serialNumber);
 
-void handleAccessory(const char *request, unsigned int requestLen, char **reply, unsigned int *replyLen);
+typedef void (*identifyFunction)(bool oldValue, bool newValue);
+
+//Since Info Service contains only constant, only add method will be provided
+void addInfoServiceToAccessory(Accessory *acc, string accName, string manufactuerName, string modelName, string serialNumber, identifyFunction identifyCallback);
+
+void handleAccessory(const char *request, unsigned int requestLen, char **reply, unsigned int *replyLen, connectionInfo *sender);

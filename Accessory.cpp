@@ -20,6 +20,14 @@ int fanSpeedVal = 0;
 
 AccessorySet *accSet;
 
+void lightIdentify(bool oldValue, bool newValue) {
+    printf("Start Identify Light\n");
+}
+
+void fanIdentify(bool oldValue, bool newValue) {
+    printf("Start Identify Fan\n");
+}
+
 static string GetStdoutFromCommand(string cmd) {
     
     string data;
@@ -170,7 +178,7 @@ Accessory* CreateLightWaveRFAccessory(string room, string name, string type)
     
     string serial = "123" + name + "4";
     
-    addInfoServiceToAccessory(lightAcc, name.c_str(), "KlikAanKlikUit", model.c_str(), serial.c_str());
+    addInfoServiceToAccessory(lightAcc, name.c_str(), "KlikAanKlikUit", model.c_str(), serial.c_str(), &lightIdentify);
 
     Service *lightService = new Service(charType_lightBulb);
     lightAcc->addService(lightService);
@@ -180,12 +188,12 @@ Accessory* CreateLightWaveRFAccessory(string room, string name, string type)
     lightAcc->addCharacteristics(lightService, lightServiceName);
 
     lightwaveRFPowerState *powerState = new lightwaveRFPowerState(room, name, charType_on, premission_read|premission_write);
-    powerState->setValue("LightSwitch");
+    //powerState->setValue("LightSwitch");
     lightAcc->addCharacteristics(lightService, powerState);
 
     if(model == "Dimmer") {
         lightwaveRFBrightness *brightnessState = new lightwaveRFBrightness(room, name, charType_brightness, premission_read|premission_write, 0, 100, 1, unit_percentage);
-        brightnessState->setValue("LightDimmer");
+        //brightnessState->setValue("LightDimmer");
         lightAcc->addCharacteristics(lightService, brightnessState);
     }
     
