@@ -19,7 +19,7 @@
 #define devicePassword "523-12-643" //Password
 #define deviceUUID "9FCF7180-6CAA-4174-ABC0-E3FAE58E3ADD"   //UUID, for pair verify
 #define controllerRecordsAddress "/home/xbian/controller" //Where to store the client keys
-#define lightwaveLoginFile "/home/xbian/lightwaverflogin.txt"
+#define lightwaveLoginFile "/Users/Roy/Documents/dev/lightwaverflogin.txt"
 
 //Number of client
 /*
