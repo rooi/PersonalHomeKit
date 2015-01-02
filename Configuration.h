@@ -9,8 +9,8 @@
 #ifndef Workbench_Configuration_h
 #define Workbench_Configuration_h
 
-#define HomeKitLog 1
-#define HomeKitReplyHeaderLog 1
+#define HomeKitLog 0
+#define HomeKitReplyHeaderLog 0
 
 //Device Setting
 #define deviceName "Night Light"    //Name
@@ -33,7 +33,7 @@
  * Count how many notifiable value exist in your set
  * For dynamic add/drop model, please estimate the maximum number (Too few->Buffer overflow)
  */
-#define numberOfNotifiableValue 1
+#define numberOfNotifiableValue 10
 
 //If you compiling this to microcontroller, set it to 1
 #define MCU 0

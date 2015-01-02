@@ -120,12 +120,19 @@ public:
         cmd += "\""; cmd += _room; cmd += "\" ";
         cmd += "\""; cmd += _name; cmd += "\" ";
         if (_value) {
-            lightStength = 255;
-            setLightStrength(255);
-            cmd += "on";
+            //lightStength = 255;
+            //setLightStrength(255);
+            //cmd += "on";
+            if(lightStength < 5) {
+                lightStength = 50;
+                setLightStrength(2.55*lightStength);
+            }
+            std::ostringstream ostr;
+            ostr << lightStength;
+            cmd += ostr.str();
         } else {
-            lightStength = 0;
-            setLightStrength(0);
+            //lightStength = 0;
+            //setLightStrength(0);
             cmd += "off";
         }
         //system(cmd.c_str());
