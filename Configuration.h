@@ -16,8 +16,8 @@
 #define _manufactuerName "ET Chan"   //Manufactuer
 #define devicePassword "523-12-643" //Password
 #define deviceUUID "9FCF7180-6CAA-4174-ABC0-E3FAE58E3ADD"   //UUID, for pair verify
-#define controllerRecordsAddress "/Users/Roy/Documents/dev/controller" //Where to store the client keys
-#define lightwaveLoginFile "/Users/Roy/Documents/dev/lightwaverflogin.txt"
+#define controllerRecordsAddress "/Users/royarents/Documents/dev/controller" //Where to store the client keys
+#define lightwaveLoginFile "/Users/royarents/Documents/dev/lightwaverflogin.txt"
 
 //Number of client
 /*
