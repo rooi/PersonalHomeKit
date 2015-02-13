@@ -209,7 +209,7 @@ Accessory* CreateLightWaveRFAccessory(string room, string name, string type)
 
 void initAccessorySet() {
     printf("Initial Accessory\n");
-    accSet = new AccessorySet();
+    accSet = &AccessorySet::getInstance();//new AccessorySet();
     
     // Read in lightwaverf login details
     string line;
