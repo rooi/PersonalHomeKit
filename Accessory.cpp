@@ -14,7 +14,7 @@
 #include <sstream>
 
 //Global Level of light strength
-int lightStength = 0;
+int lightStength = 0; // TODO change this for multiple lights
 int fanSpeedVal = 0;
 
 
@@ -26,6 +26,10 @@ void lightIdentify(bool oldValue, bool newValue) {
 
 void fanIdentify(bool oldValue, bool newValue) {
     printf("Start Identify Fan\n");
+}
+
+void plexIdentify(bool oldValue, bool newValue) {
+    printf("Start Identify Plex\n");
 }
 
 static string GetStdoutFromCommand(string cmd) {
@@ -147,6 +151,33 @@ public:
     }
 };
 
+class plexPowerState: public boolCharacteristics {
+
+public:
+    plexPowerState(unsigned short _type, int _premission): boolCharacteristics(_type, _premission) {}
+    string value() {
+        //if (plexStarted > 0)
+        //    return "1";
+        //TODO
+        return "0";
+    }
+    void setValue(string str) {
+        this->boolCharacteristics::setValue(str);
+        if (_value) {
+            // on
+            printf(GetStdoutFromCommand("open /Applications/\"Plex Home Theater\".app").c_str());
+#if HomeKitLog == 1
+            printf("Starting plex");
+#endif // HomeKitLog
+        } else {
+            // off
+#if HomeKitLog == 1
+            printf("Stopping plex");
+#endif // HomeKitLog
+        }
+    }
+};
+
 class lightwaveRFBrightness: public intCharacteristics {
     string _room;
     string _name;
@@ -207,9 +238,7 @@ Accessory* CreateLightWaveRFAccessory(string room, string name, string type)
     return lightAcc;
 }
 
-void initAccessorySet() {
-    printf("Initial Accessory\n");
-    accSet = &AccessorySet::getInstance();//new AccessorySet();
+void initLightwaveRFAccessorySet() {
     
     // Read in lightwaverf login details
     string line;
@@ -326,4 +355,44 @@ void initAccessorySet() {
         devicesBegin = lightwaverfConfig.find("\"device\"=>[");
         devicesEnd = lightwaverfConfig.find("]}");
     }
+}
+
+void initMarantzAccessorySet() {
+    string cmd = "";
+    
+}
+
+void initPlexAccessorySet() {
+//#if HomeKitLog == 1
+    printf("Plex accessory"); printf("\n");
+//#endif
+    
+    Accessory *plexAcc = new Accessory();
+    
+    string serial = "123456789";
+    string name = "Plex";
+    
+    addInfoServiceToAccessory(plexAcc, name.c_str(), "Plex", "Home Theater", serial.c_str(), &plexIdentify);
+    
+    Service *plexService = new Service(charType_switch);
+    plexAcc->addService(plexService);
+    
+    stringCharacteristics *plexServiceName = new stringCharacteristics(charType_serviceName, premission_read, 0);
+    plexServiceName->setValue(name.c_str());
+    plexAcc->addCharacteristics(plexService, plexServiceName);
+    
+    plexPowerState *powerState = new plexPowerState(charType_on, premission_read|premission_write);
+    //powerState->setValue("LightSwitch");
+    plexAcc->addCharacteristics(plexService, powerState);
+    
+    accSet->addAccessory(plexAcc);
+}
+
+void initAccessorySet() {
+    printf("Initial Accessory\n");
+    accSet = &AccessorySet::getInstance();//new AccessorySet();
+    
+    initLightwaveRFAccessorySet();
+    initMarantzAccessorySet();
+    initPlexAccessorySet();
 };

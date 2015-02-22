@@ -206,7 +206,7 @@ void *connectionLoop(void *threadInfo) {
         printf("Start Connect: %d\n", subSocket);
 
         do {
-            len = read(subSocket, info->buffer, 4096);
+            len = read(subSocket, info->buffer, 8192);
             PHKNetworkMessage msg(info->buffer);
             if (len > 0) {
                 if (!strcmp(msg.directory, "pair-setup")){
@@ -564,7 +564,7 @@ void connectionInfo::handlePairSeup() {
 #endif
         }
 
-    } while (read(subSocket, (void *)buffer, 4096) > 0);
+    } while (read(subSocket, (void *)buffer, 8192) > 0);
     SRP_free(srp);
 }
 
