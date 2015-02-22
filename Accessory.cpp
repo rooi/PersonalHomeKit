@@ -32,6 +32,10 @@ void plexIdentify(bool oldValue, bool newValue) {
     printf("Start Identify Plex\n");
 }
 
+void marantzIdentify(bool oldValue, bool newValue) {
+    printf("Start Identify Marantz\n");
+}
+
 static string GetStdoutFromCommand(string cmd) {
     
     string data;
@@ -173,6 +177,41 @@ public:
             // off
 #if HomeKitLog == 1
             printf("Stopping plex");
+#endif // HomeKitLog
+        }
+    }
+};
+
+class marantzPowerState: public boolCharacteristics {
+    
+public:
+    marantzPowerState(unsigned short _type, int _premission): boolCharacteristics(_type, _premission) {}
+    string value() {
+
+        string cmd = "osascript ./Marantz_power_status_request.scpt";
+        
+        string output = GetStdoutFromCommand(cmd);
+        
+        printf(output.c_str());
+        
+        if (output.compare("ON\n") == 0)
+            return "1";
+        else
+           return "0";
+    }
+    void setValue(string str) {
+        this->boolCharacteristics::setValue(str);
+        if (_value) {
+            // on
+            printf(GetStdoutFromCommand("osascript ./Marantz_power_on.scpt").c_str());
+#if HomeKitLog == 1
+            printf("Starting marantz");
+#endif // HomeKitLog
+        } else {
+            // off
+            printf(GetStdoutFromCommand("osascript ./Marantz_power_off.scpt").c_str());
+#if HomeKitLog == 1
+            printf("Stopping marantz");
 #endif // HomeKitLog
         }
     }
@@ -357,11 +396,6 @@ void initLightwaveRFAccessorySet() {
     }
 }
 
-void initMarantzAccessorySet() {
-    string cmd = "";
-    
-}
-
 void initPlexAccessorySet() {
 //#if HomeKitLog == 1
     printf("Plex accessory"); printf("\n");
@@ -388,11 +422,37 @@ void initPlexAccessorySet() {
     accSet->addAccessory(plexAcc);
 }
 
+void initMarantzAccessorySet() {
+    //#if HomeKitLog == 1
+    printf("Marantz accessory"); printf("\n");
+    //#endif
+    
+    Accessory *marantzAcc = new Accessory();
+    
+    string serial = "23456799";
+    string name = "Marantz";
+    
+    addInfoServiceToAccessory(marantzAcc, name.c_str(), "Marantz", "SR5004", serial.c_str(), &marantzIdentify);
+    
+    Service *service = new Service(charType_switch);
+    marantzAcc->addService(service);
+    
+    stringCharacteristics *serviceName = new stringCharacteristics(charType_serviceName, premission_read, 0);
+    serviceName->setValue(name.c_str());
+    marantzAcc->addCharacteristics(service, serviceName);
+    
+    marantzPowerState *powerState = new marantzPowerState(charType_on, premission_read|premission_write);
+    //powerState->setValue("LightSwitch");
+    marantzAcc->addCharacteristics(service, powerState);
+    
+    accSet->addAccessory(marantzAcc);
+}
+
 void initAccessorySet() {
     printf("Initial Accessory\n");
     accSet = &AccessorySet::getInstance();//new AccessorySet();
     
     initLightwaveRFAccessorySet();
-    initMarantzAccessorySet();
     initPlexAccessorySet();
+    initMarantzAccessorySet();
 };
