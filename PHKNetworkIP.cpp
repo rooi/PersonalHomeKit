@@ -739,7 +739,7 @@ void connectionInfo::handlePairVerify() {
 		write(subSocket, repBuffer, repLen);
 		delete [] repBuffer;
 	}
-    } while (!end && read(subSocket, buffer, 4096) > 0);
+    } while (!end && read(subSocket, buffer, 8192) > 0);
 
 }
 
@@ -762,8 +762,8 @@ void connectionInfo::handleAccessoryRequest() {
     pthread_mutex_init(&mutex, NULL);
 
     do {
-        bzero(buffer, 4096);
-        len = read(subSocket, buffer, 4096);
+        bzero(buffer, 8192);
+        len = read(subSocket, buffer, 8192);
 
 	//FIXME make sure buffer len > (2 + msgLen + 16)??
         if (len > 0) {
